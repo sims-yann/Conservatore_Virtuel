@@ -1,0 +1,39 @@
+@startuml
+title Sequence Diagram - Schedule a Lesson
+actor Admin
+participant UI as "ConsoleMenu"
+participant SS as ":SchedulingService"
+participant St as ":Student"
+participant T as ":Teacher"
+participant R as ":Room"
+participant Sch as ":Schedule"
+participant P as ":CoursePackage"
+participant B as ":BillingService"
+
+Admin -> UI : schedule lesson (ids, date, time, duration)
+UI -> SS : scheduleLesson(...)
+activate SS
+
+SS -> T : teaches(instrument)
+alt specialization invalid
+    SS --> UI : InvalidSpecializationException
+else valid
+    SS -> T : isAvailable(timeSlot)
+    SS -> R : isAvailable(timeSlot)
+    SS -> Sch : hasConflict(timeSlot, resources)
+    alt unavailable or conflict
+        SS --> UI : ScheduleConflictException
+    else free
+        SS -> St : getValidPackage(date)
+        alt valid package with enough hours
+            SS -> P : reserveHours(duration)
+        else no valid package
+            SS -> B : createInvoice(student, rate * duration)
+        end
+        SS -> Sch : add(new Lesson(..., SCHEDULED))
+        SS --> UI : lesson confirmed
+    end
+end
+deactivate SS
+UI --> Admin : display result
+@enduml
