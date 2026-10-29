@@ -1,0 +1,32 @@
+
+@startuml
+title Conservatoire Virtuel - Exam Registration Activity Diagram
+
+start
+
+:Student requests exam registration;
+:View list of scheduled exams;
+:Select exam session;
+:View exam details;
+:Choose register student;
+
+
+if (Exam at full capacity?) then (Yes)
+    :Reject registration;
+    :Display "Exam registration is closed";
+    stop
+else (No)
+    :Choose among list of students for instrument;
+    if (Already registered?) then (Yes)
+        :Display "Student is already registered";
+        stop
+    else (No)
+        :Create exam registration;
+        :Save registration;
+        :Confirm registration to student;
+        stop
+    endif
+endif
+
+
+@enduml
