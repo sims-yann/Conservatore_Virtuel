@@ -1,0 +1,172 @@
+
+@startuml
+title Conservatoire Virtuel - Class Diagram
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+' ===== People =====
+
+abstract class Person {
+  - id: int
+  - firstName: String
+  - lastName: String
+  - email: String
+  - phone: String
+  + getFullName(): String
+}
+
+class Student {
+  - address: String
+  - birthDate: LocalDate
+  - level: String
+  + enroll(): void
+  + getRemainingHours(): double
+}
+
+class Teacher {
+  - specializations: List<Instrument>
+  - hourlyRate: double
+  - qualifications: List<String>
+  + checkAvailability(): boolean
+}
+
+Person <|-- Student
+Person <|-- Teacher
+
+' ===== Services and Packages =====
+
+abstract class Service {
+  - id: int
+  - name: String
+  - price: double
+  + calculatePrice(): double
+}
+
+class CoursePackage {
+  - totalHours: int
+  - remainingHours: int
+  - startDate: LocalDate
+  - endDate: LocalDate
+  - type: String
+  + getRemainingHours(): double
+  + isExpired(): boolean
+}
+
+class Lesson {
+  - duration: double
+  - type: String
+  + addStudent(student: Student): void
+  + calculateConsumedHours(): double
+  + calculatePrice(): double
+}
+
+class Rental {
+  - rentalType: String
+  + calculatePrice(): double
+}
+
+Service <|-- CoursePackage
+Service <|-- Lesson
+Service <|-- Rental
+
+class Enrollment {
+  - purchaseDate: LocalDate
+  - remainingHours: double
+  + consumeHours(hours: double): void
+  + isValid(): boolean
+}
+
+Student "1" -- "0..*" Enrollment
+Enrollment "*" --> "1" Service
+
+' ===== Instruments and Rooms =====
+
+class Instrument {
+  - id: int
+  - name: String
+  - type: String
+  + isAvailable(): boolean
+}
+
+class Room {
+  - id: int
+  - name: String
+  - capacity: int
+  + isAvailable(): boolean
+}
+
+Teacher "0..*" -- "0..*" Instrument : specializes in
+Student "0..*" -- "0..*" Instrument : prefers
+
+' ===== Scheduling =====
+
+abstract class ScheduledActivity {
+  - id: int
+  - dateTime: LocalDateTime
+  - duration: double
+  - status: String
+  + cancel(): void
+  + complete(): void
+}
+
+
+class RoomBooking {
+  + bookRoom(): void
+}
+
+ScheduledActivity <|-- Lesson
+ScheduledActivity <|-- RoomBooking
+ScheduledActivity <|-- Exam
+
+Teacher "1" -- "0..*" Lesson
+Lesson "0..*" -- "1..*" Student
+Lesson "*" --> "1" Room
+Lesson "*" --> "1" Instrument
+RoomBooking "*" --> "1" Room
+CoursePackage"1" o-- "1..*" Lesson
+
+' ===== Exams =====
+
+class Exam {
+  - name: String
+  - capacity: int
+  + isFull(): boolean
+  + registerStudent(student: Student): boolean
+}
+
+class ExamResult {
+  - passed: boolean
+  - score: Double
+  + recordResult(): void
+}
+
+Student "1" -- "0..*" Exam : registers for
+Exam "1" *-- "0..*" ExamResult
+ExamResult "*" --> "1" Student
+Exam"1" o--"1"Instrument
+
+' ===== Billing =====
+
+class Invoice {
+  - id: int
+  - date: LocalDate
+  - totalAmount: double
+  + calculateTotal(): double
+  + getOutstandingBalance(): double
+}
+
+class Payment {
+  - id: int
+  - amount: double
+  - paymentDate: LocalDate
+  + recordPayment(): void
+}
+
+Student "1" -- "0..*" Invoice
+Invoice "1" *-- "0..*" Payment
+Invoice "*" -- "1..*" Service : charges for
+Rental "1" -- "1" Instrument : rental of
+
+@enduml

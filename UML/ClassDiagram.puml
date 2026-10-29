@@ -1,0 +1,411 @@
+
+@startuml
+title Conservatoire Virtuel - Class Diagram
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+' ==========================================
+' 1. ENUMERATIONS
+' ==========================================
+
+enum StudentLevel {
+    BEGINNER
+    INTERMEDIATE
+    ADVANCED
+}
+
+enum ActivityStatus {
+    SCHEDULED
+    COMPLETED
+    CANCELLED
+}
+
+enum ExamOutcome {
+    PASS
+    FAIL
+}
+
+enum PaymentMethod {
+    CASH
+    CARD
+    BANK_TRANSFER
+}
+
+enum InvoiceStatus {
+    UNPAID
+    PARTIALLY_PAID
+    PAID
+}
+
+' ==========================================
+' 2. INTERFACES
+' ==========================================
+
+interface Schedulable {
+    +isAvailable(slot: TimeSlot): boolean
+}
+
+interface Billable {
+    +calculateAmount(): BigDecimal
+}
+
+' ==========================================
+' 3. PEOPLE
+' ==========================================
+
+abstract class Person {
+    -id: String
+    -firstName: String
+    -lastName: String
+    -address: String
+    -birthDate: LocalDate
+    -phone: String
+    -email: String
+
+    +getFullName(): String
+    +getContactDetails(): String
+}
+
+class Student {
+    -level: StudentLevel
+    -preferredInstruments: List<Instrument>
+
+    +Student(other: Student)
+    +enroll(service: AbstractService): Enrollment
+    +getRemainingHours(): double
+    +getUsageHistory(): List<HourLedgerEntry>
+}
+
+class Teacher {
+    -specializations: Set<Instrument>
+    -hourlyRate: BigDecimal
+    -qualifications: List<String>
+    -availability: List<TimeSlot>
+
+    +Teacher(other: Teacher)
+    +canTeach(instrument: Instrument): boolean
+    +isAvailable(slot: TimeSlot): boolean
+}
+
+Person <|-- Student
+Person <|-- Teacher
+
+' ==========================================
+' 4. INSTRUMENTS AND RESOURCES
+' ==========================================
+
+class Instrument {
+    -id: String
+    -name: String
+}
+
+class Room {
+    -id: String
+    -name: String
+    -capacity: int
+    -availability: List<TimeSlot>
+
+    +isAvailable(slot: TimeSlot): boolean
+}
+
+class InstrumentResource {
+    -id: String
+    -instrument: Instrument
+    -availability: List<TimeSlot>
+
+    +isAvailable(slot: TimeSlot): boolean
+}
+
+Schedulable <|.. Teacher
+Schedulable <|.. Room
+Schedulable <|.. InstrumentResource
+
+Teacher "0..*" -- "0..*" Instrument : specializes in
+Student "0..*" -- "0..*" Instrument : prefers
+InstrumentResource "*" --> "1" Instrument : type
+
+' ==========================================
+' 5. SERVICES AND PACKAGES
+' ==========================================
+
+abstract class AbstractService {
+    -id: String
+    -name: String
+    -basePrice: BigDecimal
+
+    +AbstractService(other: AbstractService)
+    {abstract} +calculatePrice(): BigDecimal
+    {abstract} +getDescription(): String
+    +calculateAmount(): BigDecimal
+}
+
+class CoursePackage {
+    -totalHours: double
+    -validityPeriodDays: int
+
+    +CoursePackage(other: CoursePackage)
+    +calculatePrice(): BigDecimal
+    +getDescription(): String
+}
+
+class UnlimitedPackage {
+    -validityPeriodDays: int
+
+    +calculatePrice(): BigDecimal
+    +getDescription(): String
+}
+
+class IndividualLessonService {
+    -pricePerLesson: BigDecimal
+
+    +calculatePrice(): BigDecimal
+    +getDescription(): String
+}
+
+class RentalService {
+    -rentalType: String
+    -pricePerUnit: BigDecimal
+
+    +calculatePrice(): BigDecimal
+    +getDescription(): String
+}
+
+AbstractService <|-- CoursePackage
+AbstractService <|-- UnlimitedPackage
+AbstractService <|-- IndividualLessonService
+AbstractService <|-- RentalService
+
+Billable <|.. AbstractService
+
+' ==========================================
+' 6. ENROLLMENT AND HOUR TRACKING
+' ==========================================
+
+class Enrollment {
+    -id: String
+    -purchaseDate: LocalDate
+    -startDate: LocalDate
+    -endDate: LocalDate
+    -purchasedHours: double
+    -active: boolean
+
+    +Enrollment(other: Enrollment)
+    +isValid(date: LocalDate): boolean
+    +getRemainingHours(): double
+    +consumeHours(hours: double): void
+}
+
+class HourLedgerEntry {
+    -id: String
+    -date: LocalDateTime
+    -hours: double
+    -reason: String
+}
+
+Student "1" *-- "0..*" Enrollment : owns
+Enrollment "*" --> "1" AbstractService : purchased service
+Enrollment "1" *-- "0..*" HourLedgerEntry : usage history
+
+' ==========================================
+' 7. SCHEDULING
+' ==========================================
+
+abstract class ScheduledActivity {
+    -id: String
+    -startDateTime: LocalDateTime
+    -duration: Duration
+    -status: ActivityStatus
+
+    +ScheduledActivity(other: ScheduledActivity)
+    +getEndDateTime(): LocalDateTime
+    +cancel(): void
+    +complete(): void
+}
+
+class Lesson {
+    -groupLesson: boolean
+
+    +Lesson(other: Lesson)
+    +addParticipant(student: Student): void
+    +calculateConsumedHours(): double
+}
+
+class LessonAttendance {
+    -id: String
+    -hoursConsumed: double
+    -attended: boolean
+}
+
+class RoomBooking {
+    -purpose: String
+}
+
+class TimeSlot {
+    -start: LocalDateTime
+    -end: LocalDateTime
+
+    +overlaps(other: TimeSlot): boolean
+}
+
+ScheduledActivity <|-- Lesson
+ScheduledActivity <|-- RoomBooking
+
+Lesson "1" *-- "1..*" LessonAttendance : participants
+LessonAttendance "*" --> "1" Student : student
+Lesson "*" --> "1" Teacher : taught by
+Lesson "*" --> "1" Room : takes place in
+Lesson "*" --> "1" InstrumentResource : uses
+RoomBooking "*" --> "1" Room : reserves
+
+' ==========================================
+' 8. EXAMS AND RESULTS
+' ==========================================
+
+class ExamSession {
+    -name: String
+    -instrument: Instrument
+    -capacity: int
+
+    +isFull(): boolean
+    +isStudentRegistered(student: Student): boolean
+    +addRegistration(registration: ExamRegistration): void
+}
+
+class ExamRegistration {
+    -id: String
+    -registrationDate: LocalDateTime
+
+    +ExamRegistration(other: ExamRegistration)
+}
+
+class ExamResult {
+    -outcome: ExamOutcome
+    -score: Double
+    -recordedDate: LocalDate
+}
+
+ScheduledActivity <|-- ExamSession
+
+ExamSession "1" *-- "0..*" ExamRegistration : registrations
+ExamRegistration "*" --> "1" Student : registers
+ExamRegistration "1" *-- "0..1" ExamResult : result
+
+' ==========================================
+' 9. BILLING AND PAYMENTS
+' ==========================================
+
+class Invoice {
+    -id: String
+    -issueDate: LocalDate
+    -totalAmount: BigDecimal
+    -status: InvoiceStatus
+
+    +calculateTotal(): BigDecimal
+    +getOutstandingBalance(): BigDecimal
+}
+
+class InvoiceLine {
+    -description: String
+    -quantity: int
+    -unitPrice: BigDecimal
+
+    +calculateAmount(): BigDecimal
+}
+
+class Payment {
+    -id: String
+    -amount: BigDecimal
+    -paymentDate: LocalDateTime
+    -method: PaymentMethod
+}
+
+Student "1" -- "0..*" Invoice : billed
+Invoice "1" *-- "1..*" InvoiceLine : contains
+Invoice "1" *-- "0..*" Payment : payments
+InvoiceLine "*" --> "0..1" AbstractService : service
+
+' ==========================================
+' 10. APPLICATION SERVICES
+' ==========================================
+
+class StudentService {
+    +createStudent(student: Student): void
+    +findStudent(id: String): Student
+}
+
+class SchedulingService {
+    +scheduleLesson(lesson: Lesson): void
+    +cancelLesson(lessonId: String): void
+    +checkConflicts(activity: ScheduledActivity): boolean
+}
+
+class EnrollmentService {
+    +purchaseService(student: Student, service: AbstractService): Enrollment
+    +consumeHours(enrollment: Enrollment, hours: double): void
+}
+
+class BillingService {
+    +createInvoice(student: Student): Invoice
+    +recordPayment(invoice: Invoice, payment: Payment): void
+    +calculateOutstandingBalance(invoice: Invoice): BigDecimal
+}
+
+class ExamService {
+    +registerStudent(student: Student, exam: ExamSession): ExamRegistration
+    +recordResult(registration: ExamRegistration, result: ExamResult): void
+}
+
+class ReportService {
+    +getTotalSpent(student: Student): BigDecimal
+    +getMonthlySummary(month: YearMonth): String
+}
+
+SchedulingService ..> ScheduledActivity
+SchedulingService ..> Schedulable
+EnrollmentService ..> Enrollment
+EnrollmentService ..> HourLedgerEntry
+BillingService ..> Invoice
+BillingService ..> Payment
+ExamService ..> ExamSession
+ExamService ..> ExamRegistration
+ExamService ..> ExamResult
+ReportService ..> Invoice
+ReportService ..> Payment
+
+' ==========================================
+' 11. BUSINESS RULE NOTES
+' ==========================================
+
+note right of Enrollment
+  Package validity must be checked
+  before consuming hours.
+
+  Expired package hours cannot
+  be used.
+end note
+
+note right of LessonAttendance
+  A one-hour group lesson consumes
+  one hour from each participant.
+
+  A cancellation less than 24 hours
+  before the start consumes hours.
+end note
+
+note right of ExamSession
+  Reject registration when capacity
+  has been reached.
+
+  Reject duplicate registrations.
+end note
+
+note right of SchedulingService
+  Validate teacher specialization,
+  availability and resource conflicts.
+
+  Do not save invalid bookings.
+end note
+
+@enduml
