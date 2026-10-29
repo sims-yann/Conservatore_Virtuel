@@ -1,4 +1,3 @@
-
 @startuml
 title Conservatoire Virtuel - Class Diagram
 
@@ -37,21 +36,23 @@ Person <|-- Teacher
 
 ' ===== Services and Packages =====
 
+interface Billable {
+  + calculatePrice(): double
+}
+
 abstract class Service {
   - id: int
   - name: String
   - price: double
-  + calculatePrice(): double
 }
 
 class CoursePackage {
   - totalHours: int
-  - remainingHours: int
   - startDate: LocalDate
   - endDate: LocalDate
   - type: String
-  + getRemainingHours(): double
   + isExpired(): boolean
+  + calculatePrice(): double
 }
 
 class Lesson {
@@ -67,19 +68,23 @@ class Rental {
   + calculatePrice(): double
 }
 
-Service <|-- CoursePackage
-Service <|-- Lesson
-Service <|-- Rental
+Service ..|> Billable
+Lesson ..|> Billable
+Rental ..|> Billable
+
+' ===== Enrollment =====
 
 class Enrollment {
   - purchaseDate: LocalDate
   - remainingHours: double
   + consumeHours(hours: double): void
   + isValid(): boolean
+  + getRemainingHours(): double
 }
 
-Student "1" -- "0..*" Enrollment
-Enrollment "*" --> "1" Service
+Student "1" -- "0..*" Enrollment : owns
+Enrollment "*" --> "1" CoursePackage : based on
+Enrollment "0..*" -- "0..*" Lesson : hours consumed
 
 ' ===== Instruments and Rooms =====
 
@@ -111,7 +116,6 @@ abstract class ScheduledActivity {
   + complete(): void
 }
 
-
 class RoomBooking {
   + bookRoom(): void
 }
@@ -120,12 +124,11 @@ ScheduledActivity <|-- Lesson
 ScheduledActivity <|-- RoomBooking
 ScheduledActivity <|-- Exam
 
-Teacher "1" -- "0..*" Lesson
-Lesson "0..*" -- "1..*" Student
-Lesson "*" --> "1" Room
-Lesson "*" --> "1" Instrument
-RoomBooking "*" --> "1" Room
-CoursePackage"1" o-- "1..*" Lesson
+Teacher "1" -- "0..*" Lesson : teaches
+Lesson "0..*" -- "1..*" Student : participants
+Lesson "*" --> "1" Room : takes place in
+Lesson "*" --> "1" Instrument : uses
+RoomBooking "*" --> "1" Room : reserves
 
 ' ===== Exams =====
 
@@ -142,10 +145,11 @@ class ExamResult {
   + recordResult(): void
 }
 
-Student "1" -- "0..*" Exam : registers for
-Exam "1" *-- "0..*" ExamResult
-ExamResult "*" --> "1" Student
-Exam"1" o--"1"Instrument
+Student "0..*" -- "0..*" Exam : registers for
+Instrument "1" -- "0..*" Exam : concerns
+
+Exam "1" *-- "0..*" ExamResult : results
+ExamResult "*" --> "1" Student : belongs to
 
 ' ===== Billing =====
 
@@ -164,9 +168,12 @@ class Payment {
   + recordPayment(): void
 }
 
-Student "1" -- "0..*" Invoice
-Invoice "1" *-- "0..*" Payment
-Invoice "*" -- "1..*" Service : charges for
-Rental "1" -- "1" Instrument : rental of
+Student "1" -- "0..*" Invoice : receives
+Invoice "1" *-- "0..*" Payment : payments
+Invoice "0..*" --> "1..*" Billable : charges for
+
+' ===== Rental =====
+
+Instrument "1" -- "0..*" Rental : rented through
 
 @enduml
