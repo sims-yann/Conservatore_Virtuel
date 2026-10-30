@@ -38,3 +38,6 @@ build/
 ### Mac OS ###
 .DS_Store
 /.idea/
+
+### Local database credentials ###
+src/main/resources/db.properties
