@@ -36,8 +36,15 @@ public class Main {
                 System.out.println("Database created and demo data loaded.");
             }
         } catch (SQLException | IllegalStateException e) {
-            System.err.println("Cannot open the database: " + e.getMessage());
-            System.err.println("Check that MySQL is running and that src/main/resources/db.properties is correct.");
+            String message = "Cannot open the database: " + e.getMessage()
+                    + "\nCheck that MySQL is running and that src/main/resources/db.properties is correct.";
+            if (List.of(args).contains("--console")) {
+                System.err.println(message);
+            } else {
+                javax.swing.SwingUtilities.invokeLater(() ->
+                        javax.swing.JOptionPane.showMessageDialog(null, message, "Database connection error",
+                                javax.swing.JOptionPane.ERROR_MESSAGE));
+            }
             return;
         }
 
@@ -61,7 +68,20 @@ public class Main {
         BillingService billing = new BillingService(invoiceDao);
         ReportService reports = new ReportService(invoiceDao);
 
-        // console UI
+        if (List.of(args).contains("--console")) {
+            runConsole(people, enrollments, scheduling, exams, billing, reports);
+            DatabaseConnection.getInstance().close();
+            System.out.println("Goodbye.");
+            return;
+        }
+
+        javax.swing.SwingUtilities.invokeLater(() ->
+                new I2new.group2.ui.DesktopApp(people, enrollments, scheduling, exams, billing, reports).show());
+    }
+
+    private static void runConsole(PeopleService people, EnrollmentService enrollments,
+                                  SchedulingService scheduling, ExamService exams,
+                                  BillingService billing, ReportService reports) {
         ConsoleInput in = new ConsoleInput();
         new MainMenu(in, List.of(
                 new PeopleMenu(in, people, scheduling, enrollments),
@@ -70,8 +90,5 @@ public class Main {
                 new BillingMenu(in, billing, reports, people),
                 new ExamMenu(in, exams, scheduling)
         )).run();
-
-        DatabaseConnection.getInstance().close();
-        System.out.println("Goodbye.");
     }
 }

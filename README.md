@@ -1,6 +1,6 @@
 # Conservatoire Virtuel
 
-Information system for **Conservatoire Virtuel**, a private music school. This is a Java 25 console application backed by a MySQL / MariaDB database through plain JDBC.
+Information system for **Conservatoire Virtuel**, a private music school. This is a Java 25 desktop application backed by a MySQL / MariaDB database through plain JDBC. Its graphical interface is built with Swing.
 
 ## Project context
 
@@ -67,7 +67,7 @@ db.password=your-password
 
 `db.properties` is git-ignored, so everyone keeps their own password locally. The `conservatoire` database is created automatically if it does not exist.
 
-### 2a. Run with the demo scenario (default)
+### 2a. Run the graphical interface (default)
 Open the project in IntelliJ (JDK 25) and run `I2new.group2.Main`.
 
 On the first run, the app creates the tables (`schema.sql`) and loads the demo scenario (`data.sql`). The main menu option **Reset demo data** reloads them at any time and deletes all changes.
@@ -78,7 +78,16 @@ You can also run it from the command line once the dependencies are downloaded:
 mvn compile exec:java
 ```
 
-### 2b. Run from scratch, without any data
+The graphical interface provides views for students, teachers, the schedule, exams, invoices, services and instruments. It supports lesson scheduling, exam creation and registration, activity status changes, invoice payments, purchases, and availability updates.
+
+### 2b. Run the console interface
+The original console menus are still available by passing `--console`:
+
+```powershell
+mvn compile exec:java "-Dexec.args=--console"
+```
+
+### 2c. Run from scratch, without any data
 The app loads the demo data only when the tables do not exist yet. To start empty, create the tables yourself before the first run:
 
 ```powershell
@@ -140,12 +149,12 @@ Dates are relative to the day the data is loaded, so the scenario always works.
 
 ```
 src/main/java/I2new/group2/
-├── Main.java        wiring of DAOs, services and menus
+├── Main.java        wiring of DAOs, services and user interface
 ├── model/           domain classes, Billable / Schedulable interfaces, enums
 ├── dao/             JDBC access (one DAO per aggregate), DatabaseConnection, DatabaseInitializer
 ├── service/         business rules - reusable by the future GUI
 ├── exception/       InvalidSpecializationException, ScheduleConflictException
-└── ui/              console menus a-e
+└── ui/              Swing desktop interface and console menus a-e
 src/main/resources/
 ├── schema.sql       tables (one per class / association)
 ├── data.sql         demo scenario
@@ -163,6 +172,3 @@ UML/                 PlantUML diagrams
 | `Communications link failure` | MySQL is not running, or it uses a different port in `db.url`. |
 | `No suitable driver found` when running `java` by hand | The MySQL connector jar is not on the classpath. Run from IntelliJ or with `mvn exec:java`. In Git Bash, use PowerShell instead because Git Bash breaks `;` classpaths. |
 | Demo data reappears | It is loaded only when the tables are missing, or through **Reset demo data**. For an empty start, follow step 2b. |
-
-## Roadmap
-- Swing / JavaFX GUI on top of the existing `service` layer.
