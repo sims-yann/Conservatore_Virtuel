@@ -105,6 +105,13 @@ public class EnrollmentDao {
         }
     }
 
+    public void deleteConsumptionsForLesson(int lessonId) throws SQLException {
+        try (PreparedStatement ps = connection().prepareStatement("DELETE FROM enrollment_lesson WHERE lesson_id = ?")) {
+            ps.setInt(1, lessonId);
+            ps.executeUpdate();
+        }
+    }
+
     /** enrollment id -> hours consumed, for every package that paid for the lesson. */
     public Map<Integer, Double> findConsumptionsForLesson(int lessonId) throws SQLException {
         Map<Integer, Double> consumptions = new LinkedHashMap<>();

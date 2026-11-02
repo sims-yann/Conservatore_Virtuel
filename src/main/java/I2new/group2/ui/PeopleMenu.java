@@ -49,8 +49,12 @@ public class PeopleMenu extends Menu {
             case 3 -> addStudent();
             case 4 -> updateStudent();
             case 5 -> {
-                people.deleteStudent(in.readInt("Student id: "));
-                System.out.println("Student deleted.");
+                Student student = people.getStudent(in.readInt("Student id: "));
+                System.out.println("This also deletes: " + people.describeStudentRecords(student.getId()));
+                if (in.readYesNo("Delete " + student.getFullName() + "?")) {
+                    people.deleteStudent(student.getId());
+                    System.out.println("Student deleted.");
+                }
             }
             case 6 -> people.listTeachers().forEach(t -> System.out.println(t.describe()));
             case 7 -> teacherDetails();
@@ -62,8 +66,12 @@ public class PeopleMenu extends Menu {
                 System.out.println("Updated: " + teacher.describe());
             }
             case 10 -> {
-                people.deleteTeacher(in.readInt("Teacher id: "));
-                System.out.println("Teacher deleted.");
+                Teacher teacher = people.getTeacher(in.readInt("Teacher id: "));
+                System.out.println("This also deletes: " + people.describeTeacherRecords(teacher.getId()));
+                if (in.readYesNo("Delete " + teacher.getFullName() + "?")) {
+                    people.deleteTeacher(teacher.getId());
+                    System.out.println("Teacher deleted.");
+                }
             }
             case 11 -> {
                 // polymorphic collection: describe() / getRole() resolved at run time

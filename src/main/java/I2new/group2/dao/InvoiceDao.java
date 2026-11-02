@@ -103,11 +103,23 @@ public class InvoiceDao {
      * @return number of invoices changed
      */
     public int removeLessonCharges(int lessonId) throws SQLException {
+        return removeLessonCharges(lessonId, false);
+    }
+
+    /**
+     * Removes a deleted lesson from every invoice that charges for it, paid ones included.
+     * An invoice left without items and without payments is deleted, otherwise its total is updated.
+     * @return number of invoices changed
+     */
+    public int removeAllLessonCharges(int lessonId) throws SQLException {
+        return removeLessonCharges(lessonId, true);
+    }
+
+    private int removeLessonCharges(int lessonId, boolean includePaid) throws SQLException {
         List<Integer> invoiceIds = new ArrayList<>();
-        try (PreparedStatement ps = connection().prepareStatement("""
-                SELECT DISTINCT ii.invoice_id FROM invoice_item ii
-                WHERE ii.lesson_id = ? AND NOT EXISTS (SELECT 1 FROM payment p WHERE p.invoice_id = ii.invoice_id)
-                """)) {
+        try (PreparedStatement ps = connection().prepareStatement(
+                "SELECT DISTINCT ii.invoice_id FROM invoice_item ii WHERE ii.lesson_id = ?"
+                        + (includePaid ? "" : " AND NOT EXISTS (SELECT 1 FROM payment p WHERE p.invoice_id = ii.invoice_id)"))) {
             ps.setInt(1, lessonId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -119,7 +131,7 @@ public class InvoiceDao {
             ActivityDao.execute(connection(), "DELETE FROM invoice_item WHERE invoice_id = ? AND lesson_id = ?",
                     invoiceId, lessonId);
             Invoice invoice = findById(invoiceId).orElseThrow();
-            if (invoice.getItems().isEmpty()) {
+            if (invoice.getItems().isEmpty() && invoice.getPayments().isEmpty()) {
                 ActivityDao.execute(connection(), "DELETE FROM invoice WHERE id = ?", invoiceId);
             } else {
                 ActivityDao.execute(connection(), "UPDATE invoice SET total_amount = ? WHERE id = ?",
@@ -251,7 +263,7 @@ public class InvoiceDao {
             ps.setInt(1, invoice.getId());
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    invoice.addPayment(new Payment(rs.getInt("id"), rs.getDouble("amount"),
+                    invoice.restorePayment(new Payment(rs.getInt("id"), rs.getDouble("amount"),
                             rs.getObject("payment_date", LocalDate.class)));
                 }
             }

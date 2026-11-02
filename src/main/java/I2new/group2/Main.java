@@ -60,7 +60,7 @@ public class Main {
         InvoiceDao invoiceDao = new InvoiceDao(serviceDao, activityDao);
 
         // services (reusable by the future GUI)
-        PeopleService people = new PeopleService(studentDao, teacherDao);
+        PeopleService people = new PeopleService(studentDao, teacherDao, enrollmentDao, invoiceDao);
         EnrollmentService enrollments = new EnrollmentService(serviceDao, enrollmentDao, studentDao, invoiceDao);
         SchedulingService scheduling = new SchedulingService(activityDao, enrollmentDao, invoiceDao,
                 studentDao, teacherDao, roomDao, instrumentDao);

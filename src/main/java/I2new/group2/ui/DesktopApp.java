@@ -24,6 +24,7 @@ import I2new.group2.service.SchedulingService;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -34,6 +35,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -44,7 +46,12 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GraphicsEnvironment;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.Rectangle;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.time.LocalDate;
@@ -300,9 +307,11 @@ public final class DesktopApp {
                 scheduling.listInstruments(),
                 reports.summaryPerStudent()
         ), snapshot -> {
-            setRows(studentsTable, new String[]{"N°", "Nom", "E-mail", "Niveau", "Heures restantes"},
+            setRows(studentsTable, new String[]{"N°", "Nom", "E-mail", "Niveau", "Instruments", "Heures restantes"},
                     snapshot.students.stream().map(student -> new Object[]{
                             student.getId(), student.getFullName(), student.getEmail(), student.getLevel(),
+                            student.getPreferredInstruments().stream().map(Instrument::getName)
+                                    .reduce((a, b) -> a + ", " + b).orElse("—"),
                             student.hasUnlimitedPackage(LocalDate.now()) ? "Illimité" : String.format("%.1f h", student.getRemainingHours())
                     }).toList());
             setRows(teachersTable, new String[]{"N°", "Nom", "E-mail", "Tarif horaire", "Spécialités"},
@@ -377,11 +386,10 @@ public final class DesktopApp {
             students.setVisibleRowCount(Math.min(6, catalogs.students.size()));
             JPanel fields = formPanel(
                     "Professeur", teacher, "Salle", room, "Instrument", instrument,
-                    "Type", type, "Début (yyyy-MM-dd HH:mm)", start, "Durée (heures)", duration
+                    "Type", type, "Début (yyyy-MM-dd HH:mm)", start, "Durée (heures)", duration,
+                    "Élèves", new JScrollPane(students)
             );
-            fields.add(new JLabel("Élèves"));
-            fields.add(new JScrollPane(students));
-            if (JOptionPane.showConfirmDialog(frame, fields, "Planifier un cours",
+            if (JOptionPane.showConfirmDialog(frame, fitToScreen(fields), "Planifier un cours",
                     JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
                 return;
             }
@@ -419,7 +427,7 @@ public final class DesktopApp {
             JTextField capacity = new JTextField("10", 6);
             JPanel fields = formPanel("Nom", name, "Instrument", instrument,
                     "Début (yyyy-MM-dd HH:mm)", start, "Durée (heures)", duration, "Capacité", capacity);
-            if (JOptionPane.showConfirmDialog(frame, fields, "Créer un examen",
+            if (JOptionPane.showConfirmDialog(frame, fitToScreen(fields), "Créer un examen",
                     JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
                 return;
             }
@@ -583,7 +591,7 @@ public final class DesktopApp {
             JPanel fields = formPanel("Prénom", firstName, "Nom", lastName, "E-mail", email,
                     "Téléphone", phone, "Adresse", address, "Naissance (yyyy-MM-dd, facultatif)", birthDate,
                     "Niveau", level, "Instruments préférés", new JScrollPane(preferences));
-            if (JOptionPane.showConfirmDialog(frame, fields, "Ajouter un élève",
+            if (JOptionPane.showConfirmDialog(frame, fitToScreen(fields), "Ajouter un élève",
                     JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
                 return;
             }
@@ -620,7 +628,7 @@ public final class DesktopApp {
             JPanel fields = formPanel("Prénom", firstName, "Nom", lastName, "E-mail", email,
                     "Téléphone", phone, "Tarif horaire (€)", rate, "Jour disponible chaque semaine", day,
                     "De (HH:mm)", from, "À (HH:mm)", to, "Spécialités", new JScrollPane(specializations));
-            if (JOptionPane.showConfirmDialog(frame, fields, "Ajouter un professeur",
+            if (JOptionPane.showConfirmDialog(frame, fitToScreen(fields), "Ajouter un professeur",
                     JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
                 return;
             }
@@ -647,19 +655,23 @@ public final class DesktopApp {
             showError(new IllegalStateException("Sélectionnez une personne."));
             return;
         }
-        int answer = JOptionPane.showConfirmDialog(frame, "Supprimer cette fiche ?",
-                "Confirmation", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-        if (answer != JOptionPane.YES_OPTION) {
-            return;
-        }
-        write(() -> {
-            if (student) {
-                people.deleteStudent(id);
-            } else {
-                people.deleteTeacher(id);
+        String name = String.valueOf(table.getModel().getValueAt(table.convertRowIndexToModel(table.getSelectedRow()), 1));
+        load(() -> student ? people.describeStudentRecords(id) : people.describeTeacherRecords(id), linked -> {
+            int answer = JOptionPane.showConfirmDialog(frame,
+                    "Supprimer " + name + " ?\nCela supprimera aussi : " + linked + ".",
+                    "Confirmation", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (answer != JOptionPane.YES_OPTION) {
+                return;
             }
-            return null;
-        }, ignored -> showMessage("Fiche supprimée."));
+            write(() -> {
+                if (student) {
+                    people.deleteStudent(id);
+                } else {
+                    people.deleteTeacher(id);
+                }
+                return null;
+            }, ignored -> showMessage(name + " a été supprimé(e)."));
+        });
     }
 
     /** Reads data in the background; the tables are not reloaded afterwards. */
@@ -711,14 +723,47 @@ public final class DesktopApp {
         JOptionPane.showMessageDialog(frame, message, "Conservatoire Virtuel", JOptionPane.INFORMATION_MESSAGE);
     }
 
+    /**
+     * Label / field pairs on two columns. GridBagLayout gives each row its own height,
+     * so a tall field (a list) does not stretch every other row.
+     */
     private static JPanel formPanel(Object... labelsAndComponents) {
-        JPanel panel = new JPanel(new GridLayout(0, 2, 10, 8));
+        JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        GridBagConstraints c = new GridBagConstraints();
+        c.insets = new Insets(4, 4, 4, 8);
         for (int i = 0; i < labelsAndComponents.length; i += 2) {
-            panel.add(new JLabel(String.valueOf(labelsAndComponents[i])));
-            panel.add((Component) labelsAndComponents[i + 1]);
+            Component field = (Component) labelsAndComponents[i + 1];
+            c.gridy = i / 2;
+            c.gridx = 0;
+            c.weightx = 0;
+            c.fill = GridBagConstraints.NONE;
+            c.anchor = field instanceof JScrollPane ? GridBagConstraints.FIRST_LINE_START : GridBagConstraints.LINE_START;
+            panel.add(new JLabel(String.valueOf(labelsAndComponents[i])), c);
+            c.gridx = 1;
+            c.weightx = 1;
+            c.fill = GridBagConstraints.HORIZONTAL;
+            c.anchor = GridBagConstraints.LINE_START;
+            panel.add(field, c);
         }
         return panel;
+    }
+
+    /** Wraps a form in a vertical scroll pane when it is taller than 75 % of the usable screen height. */
+    private static JComponent fitToScreen(JComponent form) {
+        Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        Dimension preferred = form.getPreferredSize();
+        int maxHeight = (int) (screen.height * 0.75);
+        if (preferred.height <= maxHeight) {
+            return form;
+        }
+        JScrollPane scroll = new JScrollPane(form, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.setPreferredSize(new Dimension(
+                preferred.width + scroll.getVerticalScrollBar().getPreferredSize().width, maxHeight));
+        return scroll;
     }
 
     private static String studentName(List<Student> students, int id) {

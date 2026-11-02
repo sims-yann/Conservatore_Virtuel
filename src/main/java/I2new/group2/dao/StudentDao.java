@@ -111,11 +111,60 @@ public class StudentDao {
         }
     }
 
-    /** Fails (FK violation) if the student still has enrollments, invoices or lessons. */
+    /** What deleting a student also removes. */
+    public record LinkedRecords(int enrollments, int invoices, int payments, int lessons, int examRegistrations) {
+    }
+
+    public LinkedRecords countLinkedRecords(int id) throws SQLException {
+        return new LinkedRecords(
+                count("SELECT COUNT(*) FROM enrollment WHERE student_id = ?", id),
+                count("SELECT COUNT(*) FROM invoice WHERE student_id = ?", id),
+                count("SELECT COUNT(*) FROM payment p JOIN invoice i ON i.id = p.invoice_id WHERE i.student_id = ?", id),
+                count("SELECT COUNT(*) FROM lesson_participant WHERE student_id = ?", id),
+                count("SELECT COUNT(*) FROM exam_registration WHERE student_id = ?", id));
+    }
+
+    /**
+     * Deletes the student and their whole history (one transaction): invoices and payments,
+     * exam registrations and results, packages and hours used, lesson places. Lessons left
+     * without any participant are deleted too.
+     */
     public void delete(int id) throws SQLException {
-        try (PreparedStatement ps = connection().prepareStatement("DELETE FROM student WHERE id = ?")) {
+        DatabaseConnection.getInstance().inTransaction(c -> {
+            ActivityDao.execute(c, "DELETE FROM invoice WHERE student_id = ?", id);
+            ActivityDao.execute(c, "DELETE FROM exam_registration WHERE student_id = ?", id);
+            ActivityDao.execute(c, "DELETE el FROM enrollment_lesson el JOIN enrollment e ON e.id = el.enrollment_id "
+                    + "WHERE e.student_id = ?", id);
+            ActivityDao.execute(c, "DELETE FROM enrollment WHERE student_id = ?", id);
+            List<Integer> lessonIds = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT lesson_id FROM lesson_participant WHERE student_id = ?")) {
+                ps.setInt(1, id);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        lessonIds.add(rs.getInt(1));
+                    }
+                }
+            }
+            ActivityDao.execute(c, "DELETE FROM lesson_participant WHERE student_id = ?", id);
+            for (int lessonId : lessonIds) {
+                if (count("SELECT COUNT(*) FROM lesson_participant WHERE lesson_id = ?", lessonId) == 0) {
+                    ActivityDao.execute(c, "DELETE FROM enrollment_lesson WHERE lesson_id = ?", lessonId);
+                    ActivityDao.execute(c, "DELETE FROM invoice_item WHERE lesson_id = ?", lessonId);
+                    ActivityDao.execute(c, "DELETE FROM scheduled_activity WHERE id = ?", lessonId);
+                }
+            }
+            ActivityDao.execute(c, "DELETE FROM student WHERE id = ?", id);
+            return null;
+        });
+    }
+
+    private int count(String sql, int id) throws SQLException {
+        try (PreparedStatement ps = connection().prepareStatement(sql)) {
             ps.setInt(1, id);
-            ps.executeUpdate();
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
         }
     }
 

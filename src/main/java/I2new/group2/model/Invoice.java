@@ -65,6 +65,14 @@ public class Invoice {
         payments.add(payment);
     }
 
+    /**
+     * Re-attaches a payment already stored in the database, without the balance check:
+     * an item may have been removed since (e.g. its lesson was deleted), leaving a credit.
+     */
+    public void restorePayment(Payment payment) {
+        payments.add(payment);
+    }
+
     public int getId() { return id; }
     public void setId(int id) { this.id = id; }
     public int getStudentId() { return studentId; }

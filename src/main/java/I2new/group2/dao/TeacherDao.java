@@ -114,10 +114,55 @@ public class TeacherDao {
         }
     }
 
+    /** What deleting a teacher also removes. */
+    public record LinkedRecords(int lessons, int scheduledLessons, int invoicedLessons) {
+    }
+
+    public LinkedRecords countLinkedRecords(int id) throws SQLException {
+        return new LinkedRecords(
+                findLessonIds(id, false).size(),
+                findLessonIds(id, true).size(),
+                count("SELECT COUNT(DISTINCT ii.lesson_id) FROM invoice_item ii JOIN lesson l ON l.activity_id = ii.lesson_id "
+                        + "WHERE l.teacher_id = ?", id));
+    }
+
+    /** Ids of the teacher's lessons; only the ones still SCHEDULED when {@code scheduledOnly}. */
+    public List<Integer> findLessonIds(int teacherId, boolean scheduledOnly) throws SQLException {
+        String sql = "SELECT a.id FROM scheduled_activity a JOIN lesson l ON l.activity_id = a.id WHERE l.teacher_id = ?"
+                + (scheduledOnly ? " AND a.status = 'SCHEDULED'" : "");
+        List<Integer> ids = new ArrayList<>();
+        try (PreparedStatement ps = connection().prepareStatement(sql)) {
+            ps.setInt(1, teacherId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ids.add(rs.getInt(1));
+                }
+            }
+        }
+        return ids;
+    }
+
+    /**
+     * Deletes the teacher's lessons, then the teacher (qualifications, availability and specializations cascade).
+     * Hours consumed by those lessons and their invoice lines must be removed first
+     * (see {@code PeopleService.deleteTeacher}).
+     */
     public void delete(int id) throws SQLException {
-        try (PreparedStatement ps = connection().prepareStatement("DELETE FROM teacher WHERE id = ?")) {
+        DatabaseConnection.getInstance().inTransaction(c -> {
+            ActivityDao.execute(c, "DELETE a FROM scheduled_activity a JOIN lesson l ON l.activity_id = a.id "
+                    + "WHERE l.teacher_id = ?", id);
+            ActivityDao.execute(c, "DELETE FROM teacher WHERE id = ?", id);
+            return null;
+        });
+    }
+
+    private int count(String sql, int id) throws SQLException {
+        try (PreparedStatement ps = connection().prepareStatement(sql)) {
             ps.setInt(1, id);
-            ps.executeUpdate();
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
         }
     }
 
