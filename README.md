@@ -70,7 +70,7 @@ db.password=your-password
 ### 2a. Run the graphical interface (default)
 Open the project in IntelliJ (JDK 25) and run `I2new.group2.Main`.
 
-On the first run, the app creates the tables (`schema.sql`) and loads the demo scenario (`data.sql`). The main menu option **Reset demo data** reloads them at any time and deletes all changes.
+On the first run, the app creates the tables (`schema.sql`) and loads the demo scenario (`data.sql`). To reload them at any time and delete all changes, use the **Réinitialiser les données de démo** button in the GUI, or **Reset demo data** in the console menu.
 
 You can also run it from the command line once the dependencies are downloaded:
 
@@ -78,10 +78,10 @@ You can also run it from the command line once the dependencies are downloaded:
 mvn compile exec:java
 ```
 
-The graphical interface provides views for students, teachers, the schedule, exams, invoices, services and instruments. It supports lesson scheduling, exam creation and registration, activity status changes, invoice payments, purchases, and availability updates.
+If the database cannot be reached, the GUI shows an error dialog and closes.
 
 ### 2b. Run the console interface
-The original console menus are still available by passing `--console`:
+The console menus are still available with the `--console` argument. In IntelliJ, add `--console` to the run configuration's **Program arguments**. From the command line:
 
 ```powershell
 mvn compile exec:java "-Dexec.args=--console"
@@ -95,9 +95,11 @@ mysqlsh -u root -p --sql -e "DROP DATABASE IF EXISTS conservatoire; CREATE DATAB
 mysqlsh -u root -p --sql -D conservatoire --file src/main/resources/schema.sql
 ```
 
-The first command deletes the existing `conservatoire` database. You can also run `schema.sql` from MySQL Workbench or DataGrip on an empty `conservatoire` database. Then run `Main`: every list starts empty. Don't use **Reset demo data**, because it reloads the demo scenario.
+The first command deletes the existing `conservatoire` database. You can also run `schema.sql` from MySQL Workbench or DataGrip on an empty `conservatoire` database. Then run `Main`: every list starts empty. Don't use the reset button or **Reset demo data**, because they reload the demo scenario.
 
-Some records depend on others, so enter data in this order:
+The GUI cannot create instruments, rooms, course packages or rentals yet. To start from an empty database, enter at least those through the console interface (step 2b).
+
+Some records depend on others, so enter data in this order. The letters are the console menus:
 
 1. **b)** Instruments and rooms.
 2. **a)** Teachers, with their specializations and weekly availability. A teacher without availability can never be scheduled. Then students, with their preferred instruments.
@@ -114,6 +116,21 @@ The tests cover the business rules and copy constructors, and need no database:
 ```powershell
 mvn test
 ```
+
+## Graphical interface
+
+The Swing window is in French and has one tab per area:
+
+| Tab | What you can do |
+|---|---|
+| Vue d'ensemble | Overview: number of students, teachers, upcoming activities, exams, open invoices, total received |
+| Élèves / Professeurs | List, add and delete students and teachers. A new teacher gets one weekly availability slot. |
+| Planning | Full schedule; schedule a lesson; mark an activity as completed or cancel it. The 24 h rule applies. |
+| Examens | Create an exam; register a student. Only exams with free seats and students who play the instrument are offered. |
+| Facturation | Invoices with paid amount and balance; record a payment; sell a package or a rental to a student |
+| Offres & instruments | Service catalogue and instruments; put an instrument in or out of service |
+
+Select a row first for the actions that apply to it, such as cancelling, paying or deleting. **Actualiser** reloads all tables. They are also reloaded automatically after every change.
 
 ## Console menu
 
@@ -152,7 +169,7 @@ src/main/java/I2new/group2/
 ├── Main.java        wiring of DAOs, services and user interface
 ├── model/           domain classes, Billable / Schedulable interfaces, enums
 ├── dao/             JDBC access (one DAO per aggregate), DatabaseConnection, DatabaseInitializer
-├── service/         business rules - reusable by the future GUI
+├── service/         business rules, shared by the GUI and the console
 ├── exception/       InvalidSpecializationException, ScheduleConflictException
 └── ui/              Swing desktop interface and console menus a-e
 src/main/resources/
@@ -171,4 +188,4 @@ UML/                 PlantUML diagrams
 | `Access denied for user` | Wrong user or password in `db.properties`. |
 | `Communications link failure` | MySQL is not running, or it uses a different port in `db.url`. |
 | `No suitable driver found` when running `java` by hand | The MySQL connector jar is not on the classpath. Run from IntelliJ or with `mvn exec:java`. In Git Bash, use PowerShell instead because Git Bash breaks `;` classpaths. |
-| Demo data reappears | It is loaded only when the tables are missing, or through **Reset demo data**. For an empty start, follow step 2b. |
+| Demo data reappears | It is loaded only when the tables are missing, or through **Reset demo data**. For an empty start, follow step 2c. |

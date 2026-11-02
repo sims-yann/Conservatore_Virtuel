@@ -36,7 +36,6 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
@@ -52,7 +51,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 public final class DesktopApp {
@@ -68,6 +68,12 @@ public final class DesktopApp {
     private final ExamService exams;
     private final BillingService billing;
     private final ReportService reports;
+    /** Single thread for all database work: the shared JDBC connection is never used concurrently. */
+    private final ExecutorService database = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "database");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final JFrame frame = new JFrame("Conservatoire Virtuel");
     private final JLabel status = new JLabel("Prêt");
     private final JLabel overview = new JLabel("Chargement des données…");
@@ -262,6 +268,9 @@ public final class DesktopApp {
     private JButton actionButton(String label) {
         JButton button = new JButton(label);
         button.setFocusPainted(false);
+        // the Windows look and feel ignores setBackground: paint the colour ourselves so the white label is readable
+        button.setContentAreaFilled(false);
+        button.setOpaque(true);
         button.setBackground(ACCENT);
         button.setForeground(Color.WHITE);
         button.setBorder(BorderFactory.createEmptyBorder(9, 14, 9, 14));
@@ -281,7 +290,7 @@ public final class DesktopApp {
 
     private void refreshAll() {
         status.setText("Chargement…");
-        execute(() -> new Snapshot(
+        load(() -> new Snapshot(
                 people.listStudents(),
                 people.listTeachers(),
                 scheduling.getSchedule(),
@@ -349,7 +358,7 @@ public final class DesktopApp {
     }
 
     private void scheduleLesson() {
-        execute(() -> new Catalogs(people.listStudents(), people.listTeachers(), scheduling.listRooms(),
+        load(() -> new Catalogs(people.listStudents(), people.listTeachers(), scheduling.listRooms(),
                 scheduling.listInstruments()), catalogs -> {
             if (catalogs.students.isEmpty() || catalogs.teachers.isEmpty() || catalogs.rooms.isEmpty()
                     || catalogs.instruments.isEmpty()) {
@@ -387,7 +396,7 @@ public final class DesktopApp {
                 LessonType lessonType = (LessonType) type.getSelectedItem();
                 LocalDateTime dateTime = LocalDateTime.parse(start.getText().trim(), DATE_TIME);
                 double hours = Double.parseDouble(duration.getText().trim());
-                execute(() -> scheduling.scheduleLesson(teacherId, roomId, instrumentId, studentIds,
+                write(() -> scheduling.scheduleLesson(teacherId, roomId, instrumentId, studentIds,
                                 lessonType, dateTime, hours).notes(),
                         notes -> showMessage(String.join("\n", notes)));
             } catch (RuntimeException exception) {
@@ -397,7 +406,7 @@ public final class DesktopApp {
     }
 
     private void createExam() {
-        execute(scheduling::listInstruments, instruments -> {
+        load(scheduling::listInstruments, instruments -> {
             if (instruments.isEmpty()) {
                 showError(new IllegalStateException("Aucun instrument n'est enregistré."));
                 return;
@@ -420,7 +429,7 @@ public final class DesktopApp {
                 LocalDateTime dateTime = LocalDateTime.parse(start.getText().trim(), DATE_TIME);
                 double hours = Double.parseDouble(duration.getText().trim());
                 int seats = Integer.parseInt(capacity.getText().trim());
-                execute(() -> exams.createExam(examName, instrumentId, dateTime, hours, seats),
+                write(() -> exams.createExam(examName, instrumentId, dateTime, hours, seats),
                         result -> showMessage("Examen créé : " + result.getName()));
             } catch (RuntimeException exception) {
                 showError(exception);
@@ -429,7 +438,7 @@ public final class DesktopApp {
     }
 
     private void registerStudent() {
-        execute(exams::listExams, allExams -> {
+        load(exams::listExams, allExams -> {
             List<Exam> scheduled = allExams.stream().filter(exam -> exam.getStatus() == ActivityStatus.SCHEDULED
                     && !exam.isFull()).toList();
             if (scheduled.isEmpty()) {
@@ -441,7 +450,7 @@ public final class DesktopApp {
             if (selectedExam == null) {
                 return;
             }
-            execute(() -> exams.candidatesFor(selectedExam), candidates -> {
+            load(() -> exams.candidatesFor(selectedExam), candidates -> {
                 if (candidates.isEmpty()) {
                     showError(new IllegalStateException("Aucun élève éligible (instrument préféré requis)."));
                     return;
@@ -450,7 +459,7 @@ public final class DesktopApp {
                         "Inscription à " + selectedExam.getName(), JOptionPane.PLAIN_MESSAGE, null,
                         candidates.toArray(), candidates.get(0));
                 if (student != null) {
-                    execute(() -> {
+                    write(() -> {
                         exams.registerStudent(selectedExam.getId(), student.getId());
                         return null;
                     }, ignored -> showMessage(student.getFullName() + " est inscrit à l'examen."));
@@ -465,7 +474,7 @@ public final class DesktopApp {
             showError(new IllegalStateException("Sélectionnez une activité dans le planning."));
             return;
         }
-        execute(() -> {
+        write(() -> {
             if (complete) {
                 scheduling.completeActivity(id);
                 return "Activité terminée.";
@@ -492,7 +501,7 @@ public final class DesktopApp {
         }
         try {
             double amount = Double.parseDouble(amountText.trim().replace(',', '.'));
-            execute(() -> billing.recordPayment(id, amount, LocalDate.now()), updated ->
+            write(() -> billing.recordPayment(id, amount, LocalDate.now()), updated ->
                     showMessage("Paiement enregistré. Solde restant : " + money(updated.getOutstandingBalance())));
         } catch (RuntimeException exception) {
             showError(exception);
@@ -500,7 +509,7 @@ public final class DesktopApp {
     }
 
     private void purchaseService() {
-        execute(() -> new Catalogs(people.listStudents(), enrollments.listServices()), catalogs -> {
+        load(() -> new Catalogs(people.listStudents(), enrollments.listServices()), catalogs -> {
             List<Student> students = catalogs.students;
             List<Service> offerings = catalogs.services;
             if (students.isEmpty() || offerings.isEmpty()) {
@@ -519,7 +528,7 @@ public final class DesktopApp {
             if (offering == null) {
                 return;
             }
-            execute(() -> {
+            write(() -> {
                 if (offering instanceof CoursePackage coursePackage) {
                     return enrollments.purchasePackage(student.getId(), coursePackage.getId());
                 }
@@ -539,7 +548,7 @@ public final class DesktopApp {
             return;
         }
         boolean available = !instrument.isAvailable();
-        execute(() -> {
+        write(() -> {
             scheduling.setInstrumentAvailable(id, available);
             return null;
         }, ignored -> showMessage(instrument.getName() + (available ? " est disponible." : " est hors service.")));
@@ -552,14 +561,14 @@ public final class DesktopApp {
         if (answer != JOptionPane.YES_OPTION) {
             return;
         }
-        execute(() -> {
+        write(() -> {
             DatabaseInitializer.resetDemoData();
             return null;
         }, ignored -> showMessage("Les données de démonstration ont été rechargées."));
     }
 
     private void addStudent() {
-        execute(scheduling::listInstruments, instruments -> {
+        load(scheduling::listInstruments, instruments -> {
             JTextField firstName = new JTextField(18);
             JTextField lastName = new JTextField(18);
             JTextField email = new JTextField(18);
@@ -585,7 +594,7 @@ public final class DesktopApp {
                         phone.getText(), address.getText(), date,
                         (I2new.group2.model.StudentLevel) level.getSelectedItem());
                 preferences.getSelectedValuesList().forEach(student::addPreferredInstrument);
-                execute(() -> {
+                write(() -> {
                     people.addStudent(student);
                     return null;
                 }, ignored -> showMessage("Élève ajouté."));
@@ -596,7 +605,7 @@ public final class DesktopApp {
     }
 
     private void addTeacher() {
-        execute(scheduling::listInstruments, instruments -> {
+        load(scheduling::listInstruments, instruments -> {
             JTextField firstName = new JTextField(18);
             JTextField lastName = new JTextField(18);
             JTextField email = new JTextField(18);
@@ -621,7 +630,7 @@ public final class DesktopApp {
                 specializations.getSelectedValuesList().forEach(teacher::addSpecialization);
                 teacher.addAvailability(new Teacher.Availability((java.time.DayOfWeek) day.getSelectedItem(),
                         java.time.LocalTime.parse(from.getText().trim()), java.time.LocalTime.parse(to.getText().trim())));
-                execute(() -> {
+                write(() -> {
                     people.addTeacher(teacher);
                     return null;
                 }, ignored -> showMessage("Professeur ajouté."));
@@ -643,7 +652,7 @@ public final class DesktopApp {
         if (answer != JOptionPane.YES_OPTION) {
             return;
         }
-        execute(() -> {
+        write(() -> {
             if (student) {
                 people.deleteStudent(id);
             } else {
@@ -653,38 +662,44 @@ public final class DesktopApp {
         }, ignored -> showMessage("Fiche supprimée."));
     }
 
-    private <T> void execute(SqlTask<T> task, Consumer<T> success) {
-        status.setText("Traitement en cours…");
-        new SwingWorker<T, Void>() {
-            @Override
-            protected T doInBackground() throws Exception {
-                return task.run();
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    T result = get();
-                    status.setText("Opération terminée");
-                    refreshDataAfterAction();
-                    success.accept(result);
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                    status.setText("Opération interrompue");
-                    showError(exception);
-                } catch (ExecutionException exception) {
-                    status.setText("Échec de l'opération");
-                    showError(exception.getCause() == null ? exception : exception.getCause());
-                } catch (RuntimeException exception) {
-                    status.setText("Échec de l'affichage");
-                    showError(exception);
-                }
-            }
-        }.execute();
+    /** Reads data in the background; the tables are not reloaded afterwards. */
+    private <T> void load(SqlTask<T> task, Consumer<T> success) {
+        execute(task, success, false);
     }
 
-    private void refreshDataAfterAction() {
-        refreshAll();
+    /** Changes data in the background, then reloads every table. */
+    private <T> void write(SqlTask<T> task, Consumer<T> success) {
+        execute(task, success, true);
+    }
+
+    /**
+     * Runs {@code task} on the single database thread (the JDBC connection is shared, so two tasks
+     * must never run at the same time), then hands the result to {@code success} on the Swing thread.
+     */
+    private <T> void execute(SqlTask<T> task, Consumer<T> success, boolean refreshAfter) {
+        status.setText("Traitement en cours…");
+        database.execute(() -> {
+            try {
+                T result = task.run();
+                SwingUtilities.invokeLater(() -> {
+                    status.setText("Opération terminée");
+                    if (refreshAfter) {
+                        refreshAll();
+                    }
+                    try {
+                        success.accept(result);
+                    } catch (RuntimeException exception) {
+                        status.setText("Échec de l'affichage");
+                        showError(exception);
+                    }
+                });
+            } catch (Exception exception) {
+                SwingUtilities.invokeLater(() -> {
+                    status.setText("Échec de l'opération");
+                    showError(exception);
+                });
+            }
+        });
     }
 
     private void showError(Throwable error) {
